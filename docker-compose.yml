@@ -1,0 +1,60 @@
+#Docker-compose file for alphanet infra
+# Run it using: $ docker-compose up
+
+version: "3"
+services:
+  mySQL:
+    image: mysql
+    networks:
+      - data_network
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: kafka_test
+      MYSQL_DATABASE: cdc
+      MYSQL_USER: cdc
+      MYSQL_PASSWORD: cdc
+    ports:
+      - 3306:3306
+    volumes:
+      - ./src/mysql/:/etc/mysql/conf.d
+  zookeeper:
+    image: wurstmeister/zookeeper
+    ports:
+      - 2181
+  kafka:
+    image: wurstmeister/kafka
+    ports:
+      - 9092:9092
+    environment:
+      KAFKA_ADVERTISED_HOST_NAME: 192.168.1.17
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_CREATE_TOPICS: "test:1:1"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+  maxwell:
+    image: zendesk/maxwell
+    depends_on:
+      - 'mySQL'
+      - 'kafka'
+    environment:
+      MYSQL_USERNAME: cdc
+      MYSQL_PASSWORD: cdc
+      MYSQL_HOST: mySQL
+      KAFKA: kafka
+      KAFKA_PORT: 9092
+    entrypoint:
+      - bin/maxwell
+      - --user=cdc
+      - --password=cdc
+      - --host=192.168.1.17
+      - --producer=kafka
+      - --kafka.bootstrap.servers=192.168.1.17:9092
+      - --schema_database=cdc 
+      - --output_ddl=true
+
+networks:
+  data_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.26.0/24
